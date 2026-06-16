@@ -62,6 +62,8 @@ CFLAGS_head32.o := -fno-stack-protector
 CFLAGS_head64.o := -fno-stack-protector
 CFLAGS_irq.o := -I $(src)/../include/asm/trace
 
+obj-y			+= nk_mmu.o
+
 obj-y			+= head_$(BITS).o
 obj-y			+= head$(BITS).o
 obj-y			+= ebda.o
@@ -169,6 +171,7 @@ obj-$(CONFIG_CALL_THUNKS)		+= callthunks.o
 obj-$(CONFIG_X86_CET)			+= cet.o
 
 obj-$(CONFIG_X86_USER_SHADOW_STACK)	+= shstk.o
+
 
 ###
 # 64 bit specific files

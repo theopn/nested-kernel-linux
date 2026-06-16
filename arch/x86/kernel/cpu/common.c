@@ -75,6 +75,8 @@
 #include <asm/posted_intr.h>
 #include <asm/runtime-const.h>
 
+#include <asm/nk_mmu.h>
+
 #include "cpu.h"
 
 DEFINE_PER_CPU_READ_MOSTLY(struct cpuinfo_x86, cpu_info);
@@ -453,22 +455,27 @@ static const unsigned long cr4_pinned_mask = X86_CR4_SMEP | X86_CR4_SMAP | X86_C
 static DEFINE_STATIC_KEY_FALSE_RO(cr_pinning);
 static unsigned long cr4_pinned_bits __ro_after_init;
 
+// void native_write_cr0(unsigned long val)
+// {
+// 	unsigned long bits_missing = 0;
+//
+// set_register:
+// 	asm volatile("mov %0,%%cr0": "+r" (val) : : "memory");
+//
+// 	if (static_branch_likely(&cr_pinning)) {
+// 		if (unlikely((val & X86_CR0_WP) != X86_CR0_WP)) {
+// 			bits_missing = X86_CR0_WP;
+// 			val |= bits_missing;
+// 			goto set_register;
+// 		}
+// 		/* Warn after we've set the missing bits. */
+// 		WARN_ONCE(bits_missing, "CR0 WP bit went missing!?\n");
+// 	}
+// }
 void native_write_cr0(unsigned long val)
 {
-	unsigned long bits_missing = 0;
-
-set_register:
-	asm volatile("mov %0,%%cr0": "+r" (val) : : "memory");
-
-	if (static_branch_likely(&cr_pinning)) {
-		if (unlikely((val & X86_CR0_WP) != X86_CR0_WP)) {
-			bits_missing = X86_CR0_WP;
-			val |= bits_missing;
-			goto set_register;
-		}
-		/* Warn after we've set the missing bits. */
-		WARN_ONCE(bits_missing, "CR0 WP bit went missing!?\n");
-	}
+	/* Hijacked by the NK function */
+	nk_write_cr0(val);
 }
 EXPORT_SYMBOL(native_write_cr0);
 
