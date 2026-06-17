@@ -10,6 +10,8 @@
 #include <linux/irqflags.h>
 #include <linux/jump_label.h>
 
+#include <asm/nk_mmu.h>
+
 void native_write_cr0(unsigned long val);
 
 static inline unsigned long native_read_cr0(void)
@@ -38,9 +40,19 @@ static __always_inline unsigned long __native_read_cr3(void)
 	return val;
 }
 
+// static __always_inline void native_write_cr3(unsigned long val)
+// {
+// 	asm volatile("mov %0,%%cr3": : "r" (val) : "memory");
+// }
 static __always_inline void native_write_cr3(unsigned long val)
 {
+#ifdef __NK_DECOMPRESSOR
+	/* Bypass mediation during early boot decompression */
 	asm volatile("mov %0,%%cr3": : "r" (val) : "memory");
+#else
+	/* Main Kernel execution is routed to the NK */
+	nk_write_cr3(val);
+#endif
 }
 
 static inline unsigned long native_read_cr4(void)

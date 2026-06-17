@@ -18,3 +18,15 @@ void nk_write_cr0(unsigned long val)
 	/* Safe execution using raw assembly since we bypassed native_write_cr0 */
 	asm volatile("mov %0,%%cr0" : "+r"(val) : : "memory");
 }
+
+void nk_write_cr3(unsigned long val)
+{
+	/* Future: Validate physical address of the new Page Directory */
+	asm volatile("mov %0,%%cr3" : : "r"(val) : "memory");
+}
+
+void nk_write_cr4(unsigned long val)
+{
+	/* Future: Prevent SMEP/SMAP from being disabled */
+	asm volatile("mov %0,%%cr4" : : "r"(val) : "memory");
+}

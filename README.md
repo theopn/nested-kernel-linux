@@ -44,3 +44,12 @@ qemu-system-x86_64  -kernel arch/x86/boot/bzImage   \
 - `include/linux/nk.h`: header file
 - `init/main.c`: include `<linux/nk.h>`, and in `start_kernel` function, right before the wrap-up `rest_init` function, call `nk_init()`
 
+### CR3 & CR4 hijacking
+
+- CR4 is identical to CR0; change in `arch/x86/kernel/cpu/common.c`
+
+- CR3 is inline in `arch/x86/include/asm/special_insns.h`
+    - When changing in the header, in the early boot decompression stage, call assembly directly
+    - `arch/x86/boot/compressed/Makefile`: add `KBUILD_CFLAGS += -D__NK_DECOMPRESSOR`
+- Proceed as usual in `arch/x86/kernel/nk_mmu.c` and the header
+
