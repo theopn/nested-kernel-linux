@@ -1,4 +1,5 @@
 #include <linux/printk.h>
+#include <linux/compiler.h>
 #include <asm/special_insns.h>
 #include <asm/processor.h>
 #include <asm/nk_mmu.h>
@@ -29,4 +30,19 @@ void nk_write_cr4(unsigned long val)
 {
 	/* Future: Prevent SMEP/SMAP from being disabled */
 	asm volatile("mov %0,%%cr4" : : "r"(val) : "memory");
+}
+
+void nk_set_pte(pte_t *ptep, pte_t pte)
+{
+	static bool first_pte = true;
+
+	if (unlikely(first_pte)) {
+		pr_info("[NK] PTE assignment hijacked.\n");
+		first_pte = false;
+	}
+
+	/* Future: Validate that 'pte' does not map Nested Kernel memory as writable.
+	 * For now, passively pass the assignment through.
+	 */
+	WRITE_ONCE(*ptep, pte);
 }

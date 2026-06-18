@@ -5,6 +5,8 @@
 #include <linux/const.h>
 #include <asm/pgtable_64_types.h>
 
+#include <asm/nk_mmu.h>
+
 #ifndef __ASSEMBLER__
 
 /*
@@ -60,7 +62,14 @@ void set_pte_vaddr_pud(pud_t *pud_page, unsigned long vaddr, pte_t new_pte);
 
 static inline void native_set_pte(pte_t *ptep, pte_t pte)
 {
+#ifdef __NK_DECOMPRESSOR
+	/* Bypass mediation during early boot decompression */
 	WRITE_ONCE(*ptep, pte);
+#else
+	/* Main Kernel execution is routed to the NK */
+	nk_set_pte(ptep, pte);
+#endif
+	//WRITE_ONCE(*ptep, pte);
 }
 
 static inline void native_pte_clear(struct mm_struct *mm, unsigned long addr,
