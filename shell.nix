@@ -1,5 +1,10 @@
-{ pkgs ? import <nixpkgs> {} }:
-
+let
+  pkgs = import <nixpkgs> {
+    config = {
+      allowUnfree = true;
+    };
+  };
+in
 pkgs.mkShell {
   nativeBuildInputs = with pkgs; [
     gcc
@@ -11,6 +16,8 @@ pkgs.mkShell {
     openssl
     ncurses
     pkg-config
+
+    antigravity
   ];
 
   ARCH = "x86_64";
