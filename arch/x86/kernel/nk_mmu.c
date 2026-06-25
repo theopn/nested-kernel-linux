@@ -5,6 +5,8 @@
 #include <asm/set_memory.h>
 
 phys_addr_t nk_base_phys;
+// Providing the test suite the base address to attack
+//EXPORT_SYMBOL_GPL(nk_base_phys);
 phys_addr_t nk_size = 16 * 1024 * 1024; /* 16MB for NK */
 
 #ifdef CONFIG_PARAVIRT_XXL
@@ -75,14 +77,25 @@ void nk_init(void) {
 #endif
 }
 
+extern char __start_nk_rodata[];
+extern char __stop_nk_rodata[];
+
 void nk_protect_memory(void) {
     unsigned long nk_base_virt;
+    unsigned long npages;
     if (!nk_base_phys) return;
 
     nk_base_virt = (unsigned long)__va(nk_base_phys);
     
     /* Map NK memory as read-only to OK */
     set_memory_ro(nk_base_virt, nk_size >> PAGE_SHIFT);
+    
+    /* Map statically compiled NK rodata as read-only */
+    npages = PAGE_ALIGN(__stop_nk_rodata - __start_nk_rodata) >> PAGE_SHIFT;
+    if (npages > 0) {
+        int err = set_memory_ro((unsigned long)__start_nk_rodata, npages);
+        pr_info("Nested Kernel: set_memory_ro returned %d for nk_rodata (addr=%px, pages=%lu)\n", err, __start_nk_rodata, npages);
+    }
     
     pr_info("Nested Kernel: Protected NK memory and PTPs\n");
 }

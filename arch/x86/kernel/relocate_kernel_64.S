@@ -189,6 +189,7 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	movq	%cr0, %rax
 	andq	$~(X86_CR0_AM | X86_CR0_WP | X86_CR0_TS | X86_CR0_EM), %rax
 	orl	$(X86_CR0_PG | X86_CR0_PE), %eax
+	btsq	$16, %rax
 	movq	%rax, %cr0
 
 	/*
@@ -315,6 +316,7 @@ SYM_CODE_START_LOCAL_NOALIGN(virtual_mapped)
 	movq	saved_cr3(%rip), %rax
 	movq	saved_cr0(%rip), %r8
 	movq	%rax, %cr3
+	btsq	$16, %r8
 	movq	%r8, %cr0
 
 #ifdef CONFIG_KEXEC_JUMP

@@ -480,6 +480,11 @@
 	.rodata           : AT(ADDR(.rodata) - LOAD_OFFSET) {		\
 		__start_rodata = .;					\
 		*(.rodata) *(.rodata.*) *(.data.rel.ro*)		\
+		. = ALIGN(PAGE_SIZE);					\
+		__start_nk_rodata = .;					\
+		*(.nk_rodata)						\
+		. = ALIGN(PAGE_SIZE);					\
+		__stop_nk_rodata = .;					\
 		SCHED_DATA						\
 		RO_AFTER_INIT_DATA	/* Read only after init */	\
 		. = ALIGN(8);						\

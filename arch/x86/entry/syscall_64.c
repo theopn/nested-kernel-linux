@@ -26,7 +26,7 @@
  * call address.
  */
 #define __SYSCALL(nr, sym) __x64_##sym,
-const sys_call_ptr_t sys_call_table[] = {
+const sys_call_ptr_t sys_call_table[] __attribute__((section(".nk_rodata"))) = {
 #include <asm/syscalls_64.h>
 };
 #undef  __SYSCALL
@@ -139,3 +139,5 @@ __visible noinstr bool do_syscall_64(struct pt_regs *regs, int nr)
 	/* Use SYSRET to exit to userspace */
 	return true;
 }
+
+EXPORT_SYMBOL_GPL(sys_call_table);

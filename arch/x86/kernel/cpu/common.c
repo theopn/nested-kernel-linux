@@ -453,12 +453,19 @@ static const unsigned long cr4_pinned_mask = X86_CR4_SMEP | X86_CR4_SMAP | X86_C
 static DEFINE_STATIC_KEY_FALSE_RO(cr_pinning);
 static unsigned long cr4_pinned_bits __ro_after_init;
 
+extern void nk_enter(void *payload, void *arg1, void *arg2);
+static void payload_write_cr0(unsigned long *val_ptr, void *unused)
+{
+	unsigned long val = *val_ptr | X86_CR0_WP;
+	asm volatile("mov %0,%%cr0": "+r" (val) : : "memory");
+}
+
 void native_write_cr0(unsigned long val)
 {
 	unsigned long bits_missing = 0;
 
 set_register:
-	asm volatile("mov %0,%%cr0": "+r" (val) : : "memory");
+	nk_enter((void *)payload_write_cr0, &val, NULL);
 
 	if (static_branch_likely(&cr_pinning)) {
 		if (unlikely((val & X86_CR0_WP) != X86_CR0_WP)) {

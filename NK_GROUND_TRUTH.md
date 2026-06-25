@@ -48,3 +48,22 @@ Implement a minimum Trusted Computing Base (TCB) in Linux 7.1 Ring 0, isolating 
   - The `nk_write_*` functions now pass their arguments and the respective payload function to `nk_enter`.
   - Instead of passing `pte_t` structs by value (which could cause C-to-Assembly calling convention issues), pointers to the values are passed. These pointers reside on the Outer Kernel stack, which remains readable inside the payload while executing safely on the Nested Kernel stack.
 - **Live QEMU Testing**: Recompiled the kernel and ran a live QEMU simulation. The kernel booted perfectly, executing all early-boot page table allocations and modifications successfully through our assembly-level TCB gates. The WP-bit toggle and stack swaps caused zero stability issues, and the kernel reached the expected VFS rootfs panic, confirming full architectural viability.
+
+### Phase 4: Lifetime Kernel Code Integrity (The Offline Scanner)
+- **`scripts/nk_scanner.py`**: Created a Python utility that statically analyzes the compiled `vmlinux` binary using `objdump`.
+  - **Scanning Logic**: The scanner iterates through the disassembled binary using regex to explicitly search for any instructions attempting to modify `CR0` (e.g., `mov %rX, %cr0`) or use `wrmsr`.
+  - **Whitelisting**: It explicitly ignores authorized Nested Kernel TCB routines (`nk_enter`, `nk_exit`) as well as standard early boot procedures (`startup_64`, `secondary_startup_64`, etc.) that execute before our memory lockdown.
+  - **Initial Results**: Running the scanner against `vmlinux` revealed potentially unauthorized hardware modification instructions inside the core Linux tree. These primarily consist of `wrmsr` usage in sensitive system contexts (e.g., `entry_SYSCALL_64_after_hwframe`, `asm_exc_nmi`, `paranoid_entry`) and performance monitoring systems (`x86_perf_event_set_period`, `x86_pmu_enable_all`).
+
+#### CR0 Modification Patching
+To explicitly secure the core MMU threat model and prevent the Outer Kernel from dropping the WP-bit:
+- **`native_write_cr0` (`arch/x86/kernel/cpu/common.c`)**: Modified the primary C-facing CR0 write API. We wrapped the operation using our `nk_enter` boundary and created a secure payload (`payload_write_cr0`). Before executing the raw `mov %X, %cr0`, the payload mathematically enforces the WP-bit by applying a bitwise OR (`val | X86_CR0_WP`), completely neutralizing any unauthorized attempts to clear the hardware protections.
+- **Suspend/Resume Pathways (`do_suspend_lowlevel`, `identity_mapped`, `virtual_mapped`)**: For raw assembly wake-up routines where complex privilege gateways could break the fragile sleep states, we employed static assembly patching. We injected a `btsq $16, %reg` directly before the `mov %reg, %cr0` instructions. This elegantly guarantees the WP-bit is restored during ACPI and CPU hibernation events.
+- **Whitelist Updates**: Our securely wrapped payloads and statically patched assembly sequences were added to the offline scanner's whitelist. The scanner now reports exactly **0** unauthorized CR0 instructions in the compiled kernel.
+
+### Phase 5: Active Policy Enforcement (System Call Table Lockdown)
+To prove the architecture's real-world utility, we leveraged the Nested Kernel to physically protect the `sys_call_table` against rootkit hijacking and unauthorized modifications.
+- **Table Relocation**: We assigned the compiler attribute `__attribute__((section(".nk_rodata")))` to the `sys_call_table` definition in `arch/x86/entry/syscall_64.c`.
+- **Linker Integration**: We modified `arch/x86/kernel/vmlinux.lds.S` to explicitly define the `.nk_rodata` section and automatically generate the `__start_nk_rodata` and `__stop_nk_rodata` boundary symbols.
+- **Hardware Lockdown**: We adapted `nk_protect_memory()` in `arch/x86/kernel/nk_mmu.c` to identify the memory boundaries of this static section and invoke `set_memory_ro()`, strictly locking it down alongside the dynamically allocated Nested Kernel memory.
+- **Live Verification**: Running QEMU with a BusyBox shell confirmed that the OS booted perfectly. Standard user-space commands (which rely heavily on system calls like `execve`, `read`, and `write`) executed without error, confirming the hardware-enforced lockdown is seamless and fully compatible with normal kernel operations.

@@ -98,6 +98,7 @@ SYM_FUNC_START(do_suspend_lowlevel)
 	movq	saved_context_cr2(%rax), %rbx
 	movq	%rbx, %cr2
 	movq	saved_context_cr0(%rax), %rbx
+	btsq	$16, %rbx
 	movq	%rbx, %cr0
 	pushq	pt_regs_flags(%rax)
 	popfq
