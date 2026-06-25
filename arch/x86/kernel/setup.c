@@ -1076,6 +1076,9 @@ void __init setup_arch(char **cmdline_p)
 
 	e820__memblock_setup();
 
+	extern void nk_init(void);
+	nk_init();
+
 	/*
 	 * Needs to run after memblock setup because it needs the physical
 	 * memory size.
