@@ -134,6 +134,10 @@
 #define X86_CR4_SMAP		_BITUL(X86_CR4_SMAP_BIT)
 #define X86_CR4_PKE_BIT		22 /* enable Protection Keys support */
 #define X86_CR4_PKE		_BITUL(X86_CR4_PKE_BIT)
+// Add after line 136 (X86_CR4_PKE)
+#define X86_CR4_PKS_BIT     24 /* enable Supervisor Protection Keys */
+#define X86_CR4_PKS         _BITUL(X86_CR4_PKS_BIT)
+//
 #define X86_CR4_CET_BIT		23 /* enable Control-flow Enforcement Technology */
 #define X86_CR4_CET		_BITUL(X86_CR4_CET_BIT)
 #define X86_CR4_LASS_BIT	27 /* enable Linear Address Space Separation support */
