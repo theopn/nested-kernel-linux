@@ -710,6 +710,13 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 	if (cpu_feature_enabled(X86_FEATURE_AMD_WORKLOAD_CLASS))
 		wrmsrl(MSR_AMD_WORKLOAD_HRST, 0x1);
 
+#ifndef MSR_IA32_PKRS
+#define MSR_IA32_PKRS 0x6E1
+#endif
+	if (unlikely(prev_p->thread.nk_pkrs_state != next_p->thread.nk_pkrs_state)) {
+		wrmsrl(MSR_IA32_PKRS, next_p->thread.nk_pkrs_state);
+	}
+
 	return prev_p;
 }
 
