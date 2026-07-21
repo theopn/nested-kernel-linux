@@ -90,9 +90,7 @@ void nk_protect_memory(void) {
 
     nk_base_virt = (unsigned long)__va(nk_base_phys);
     
-    /* Map NK memory as read-only to OK */
-    set_memory_ro(nk_base_virt, nk_size >> PAGE_SHIFT);
-    
+
     /* Map statically compiled NK rodata as read-only */
     npages = PAGE_ALIGN(__stop_nk_rodata - __start_nk_rodata) >> PAGE_SHIFT;
     if (npages > 0) {
