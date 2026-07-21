@@ -64,7 +64,7 @@ void nk_write_PMD(pmd_t *pmdp, pmd_t pmdval) {
 void nk_write(void *dest, const void *src, size_t size) {}
 
 void nk_init(void) {
-    nk_base_phys = memblock_phys_alloc_range(nk_size, PAGE_SIZE, 0, ULLONG_MAX);
+    nk_base_phys = memblock_phys_alloc_range(nk_size, PMD_SIZE, 0, ULLONG_MAX);
     if (!nk_base_phys) {
         panic("Nested Kernel: Failed to allocate physical memory!\n");
     }
