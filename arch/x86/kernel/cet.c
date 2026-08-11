@@ -37,6 +37,10 @@ static const char *cp_err_string(unsigned long error_code)
 
 static void do_unexpected_cp(struct pt_regs *regs, unsigned long error_code)
 {
+	if (!user_mode(regs)) {
+		pr_emerg("[CITADEL] Control Flow Violation Detected!\n");
+		die("Control Protection Exception", regs, error_code);
+	}
 	WARN_ONCE(1, "Unexpected %s #CP, error_code: %s\n",
 		  user_mode(regs) ? "user mode" : "kernel mode",
 		  cp_err_string(error_code));

@@ -6,6 +6,12 @@
 #include <asm/tlbflush.h>
 #include <asm/processor-flags.h>
 #include <asm/tlb.h>
+#include <asm/cpufeature.h>
+
+#ifndef X86_FEATURE_PKS
+#define X86_FEATURE_PKS (16*32 + 31)
+#endif
+
 phys_addr_t nk_base_phys;
 // Providing the test suite the base address to attack
 //EXPORT_SYMBOL_GPL(nk_base_phys);
@@ -117,6 +123,9 @@ static int apply_supervisor_pkey(unsigned long addr, int pkey) {
 }
 
 static void nk_init_cpu_pks(void *info) {
+    if (!cpu_feature_enabled(X86_FEATURE_PKS))
+        return;
+
     /* Enable PKS in CR4 on this specific CPU */
     cr4_set_bits(X86_CR4_PKS);
     
@@ -133,6 +142,12 @@ void nk_protect_citadel_pks(void) {
     unsigned long addr;
     unsigned long nk_base_virt = (unsigned long)__va(nk_base_phys);
     unsigned long end = nk_base_virt + nk_size;
+
+    if (!cpu_feature_enabled(X86_FEATURE_PKS)) {
+        printk(KERN_INFO "Nested Kernel: PKS not supported by hardware. Bypassing PKS protection.\n");
+        return;
+    }
+
     for (addr = nk_base_virt; addr < end; addr += PAGE_SIZE) {
         apply_supervisor_pkey(addr, 1);
     }
