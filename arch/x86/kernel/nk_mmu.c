@@ -38,6 +38,7 @@ void nk_report_ptes(unsigned long vaddr);
 static void nk_analyze_pud_page(unsigned long vaddr);
 static void nk_analyze_pmd_page(unsigned long vaddr);
 static void nk_count_citadel_ptpages(void);
+static void nk_protect_citadel_ptpages(void);
 
 extern void nk_enter(void *payload, void *arg1, void *arg2);
 extern void nk_exit(void);
@@ -218,6 +219,8 @@ void nk_protect_memory(void)
 	nk_analyze_pud_page(nk_base_virt);
 	nk_analyze_pmd_page(nk_base_virt);
 	nk_count_citadel_ptpages();
+
+	nk_protect_citadel_ptpages();
 
 	nk_locked_down = true;
 	pr_info("Nested Kernel: Lockdown engaged.\n");
@@ -476,4 +479,51 @@ void nk_protect_citadel_pks(void)
 
 	printk(KERN_INFO
 	       "Nested Kernel: PKS Key 1 applied and locked on all CPUs.\n");
+}
+
+static void nk_protect_citadel_ptpages(void)
+{
+	unsigned long addr;
+	unsigned long nk_base_virt = (unsigned long)__va(nk_base_phys);
+	unsigned long end = nk_base_virt + nk_size;
+
+	pr_info("NK: Protecting Citadel PTE pages...\n");
+
+	for (addr = nk_base_virt; addr < end; addr += PMD_SIZE) {
+		unsigned int level;
+		pte_t *pte = lookup_address(addr, &level);
+		unsigned long pte_page_addr;
+		pte_t *pte_page;
+		int i, foreign = 0;
+		int ro_ret, pks_ret = -1;
+
+		if (!pte) {
+			pr_err("NK: No PTE mapping found for Citadel addr %lx\n", addr);
+			continue;
+		}
+
+		pte_page_addr = (unsigned long)pte & PAGE_MASK;
+		pte_page = (pte_t *)pte_page_addr;
+
+		for (i = 0; i < PTRS_PER_PTE; i++) {
+			pte_t *p = pte_page + i;
+			if (pte_present(*p) && !nk_pte_maps_citadel(*p))
+				foreign++;
+		}
+
+		if (foreign > 0) {
+			pr_err("NK: Cannot protect PTE page %lx; contains %d foreign entries\n",
+			       pte_page_addr, foreign);
+			continue;
+		}
+
+		ro_ret = set_memory_ro(pte_page_addr, 1);
+
+		if (cpu_feature_enabled(X86_FEATURE_PKS)) {
+			pks_ret = apply_supervisor_pkey(pte_page_addr, 1);
+		}
+
+		pr_info("NK: Protected PTE page at %lx (RO: %d, PKS: %d)\n",
+			pte_page_addr, ro_ret, pks_ret);
+	}
 }
