@@ -22,6 +22,8 @@ static bool nk_locked_down; /* false until nk_protect_memory() completes */
 #ifdef CONFIG_PARAVIRT_XXL
 void (*nk_orig_set_pte)(pte_t *ptep, pte_t pteval);
 void (*nk_orig_set_pmd)(pmd_t *pmdp, pmd_t pmdval);
+void (*nk_orig_set_pud)(pud_t *pudp, pud_t pudval);
+void (*nk_orig_set_p4d)(p4d_t *p4dp, p4d_t p4dval);
 #endif
 
 void nk_declare(void);
@@ -39,6 +41,9 @@ static void nk_analyze_pud_page(unsigned long vaddr);
 static void nk_analyze_pmd_page(unsigned long vaddr);
 static void nk_count_citadel_ptpages(void);
 static void nk_protect_citadel_ptpages(void);
+
+void nk_write_PUD(pud_t *pudp, pud_t pudval);
+void nk_write_P4D(p4d_t *p4dp, p4d_t p4dval);
 
 extern void nk_enter(void *payload, void *arg1, void *arg2);
 extern void nk_exit(void);
@@ -62,13 +67,60 @@ static bool nk_pte_maps_citadel(pte_t pte)
 	return pa >= nk_base_phys && pa < nk_base_phys + nk_size;
 }
 
+#define NK_MAX_PTPAGES 16
+static unsigned long nk_protected_ptpages[NK_MAX_PTPAGES];
+static int nk_nr_protected_ptpages;
+
+static bool nk_is_protected_ptpage(unsigned long addr)
+{
+	int i;
+	for (i = 0; i < nk_nr_protected_ptpages; i++) {
+		if (nk_protected_ptpages[i] == addr)
+			return true;
+	}
+	return false;
+}
+
 static bool nk_pmd_maps_citadel(pmd_t pmd)
 {
 	phys_addr_t pa;
+	unsigned long pte_page;
+
 	if (!nk_base_phys || !pmd_present(pmd))
 		return false;
-	pa = (phys_addr_t)pmd_pfn(pmd) << PAGE_SHIFT;
-	return !(pa + PMD_SIZE <= nk_base_phys || pa >= nk_base_phys + nk_size);
+
+	if (pmd_leaf(pmd)) {
+		pa = (phys_addr_t)pmd_pfn(pmd) << PAGE_SHIFT;
+		return !(pa + PMD_SIZE <= nk_base_phys ||
+			 pa >= nk_base_phys + nk_size);
+	}
+
+	pte_page = (unsigned long)__va(pmd_pfn(pmd) << PAGE_SHIFT);
+	bool match = nk_is_protected_ptpage(pte_page);
+
+	pr_warn_ratelimited("NK-DBG: pmd=0x%lx pfn=0x%lx -> pte_page=0x%lx match=%d nr=%d\n",
+			    pmd_val(pmd), (unsigned long)pmd_pfn(pmd),
+			    pte_page, match, nk_nr_protected_ptpages);
+
+	return match;
+}
+
+static bool nk_pud_maps_citadel(pud_t pud)
+{
+	phys_addr_t pa;
+	if (!nk_base_phys || !pud_present(pud) || !pud_leaf(pud))
+		return false;
+	pa = (phys_addr_t)pud_pfn(pud) << PAGE_SHIFT;
+	return !(pa + PUD_SIZE <= nk_base_phys || pa >= nk_base_phys + nk_size);
+}
+
+static bool nk_p4d_maps_citadel(p4d_t p4d)
+{
+	phys_addr_t pa;
+	if (!nk_base_phys || !p4d_present(p4d) || !p4d_leaf(p4d))
+		return false;
+	pa = (phys_addr_t)p4d_pfn(p4d) << PAGE_SHIFT;
+	return !(pa + P4D_SIZE <= nk_base_phys || pa >= nk_base_phys + nk_size);
 }
 
 static atomic_t nk_pte_calls = ATOMIC_INIT(0);
@@ -156,6 +208,72 @@ void nk_write_PMD(pmd_t *pmdp, pmd_t pmdval)
 	nk_enter((void *)payload_set_pmd, pmdp, &pmdval);
 }
 
+static void payload_set_pud(pud_t *pudp, pud_t *pudval_ptr)
+{
+	pud_t val = *pudval_ptr;
+
+	if (nk_locked_down) {
+		pud_t old = *pudp;
+		if (nk_pud_maps_citadel(old)) {
+			pr_warn_ratelimited(
+				"NK: rejected write to PUD mapping Citadel (old=0x%lx new=0x%lx)\n",
+				pud_val(old), pud_val(val));
+			return;
+		}
+		if (nk_pud_maps_citadel(val)) {
+			pr_warn_ratelimited(
+				"NK: rejected PUD aliasing Citadel phys\n");
+			return;
+		}
+	}
+
+#ifdef CONFIG_PARAVIRT_XXL
+	if (nk_orig_set_pud) {
+		nk_orig_set_pud(pudp, val);
+		return;
+	}
+#endif
+	native_set_pud(pudp, val);
+}
+
+void nk_write_PUD(pud_t *pudp, pud_t pudval)
+{
+	nk_enter((void *)payload_set_pud, pudp, &pudval);
+}
+
+static void payload_set_p4d(p4d_t *p4dp, p4d_t *p4dval_ptr)
+{
+	p4d_t val = *p4dval_ptr;
+
+	if (nk_locked_down) {
+		p4d_t old = *p4dp;
+		if (nk_p4d_maps_citadel(old)) {
+			pr_warn_ratelimited(
+				"NK: rejected write to P4D mapping Citadel (old=0x%lx new=0x%lx)\n",
+				p4d_val(old), p4d_val(val));
+			return;
+		}
+		if (nk_p4d_maps_citadel(val)) {
+			pr_warn_ratelimited(
+				"NK: rejected P4D aliasing Citadel phys\n");
+			return;
+		}
+	}
+
+#ifdef CONFIG_PARAVIRT_XXL
+	if (nk_orig_set_p4d) {
+		nk_orig_set_p4d(p4dp, val);
+		return;
+	}
+#endif
+	native_set_p4d(p4dp, val);
+}
+
+void nk_write_P4D(p4d_t *p4dp, p4d_t p4dval)
+{
+	nk_enter((void *)payload_set_p4d, p4dp, &p4dval);
+}
+
 void nk_write(void *dest, const void *src, size_t size)
 {
 }
@@ -176,6 +294,12 @@ void nk_init(void)
 
 	nk_orig_set_pmd = pv_ops.mmu.set_pmd;
 	pv_ops.mmu.set_pmd = nk_write_PMD;
+
+	nk_orig_set_pud = pv_ops.mmu.set_pud;
+	pv_ops.mmu.set_pud = nk_write_PUD;
+
+	nk_orig_set_p4d = pv_ops.mmu.set_p4d;
+	pv_ops.mmu.set_p4d = nk_write_P4D;
 #endif
 }
 
@@ -525,5 +649,13 @@ static void nk_protect_citadel_ptpages(void)
 
 		pr_info("NK: Protected PTE page at %lx (RO: %d, PKS: %d)\n",
 			pte_page_addr, ro_ret, pks_ret);
+
+		if (nk_nr_protected_ptpages < NK_MAX_PTPAGES) {
+			nk_protected_ptpages[nk_nr_protected_ptpages++] = pte_page_addr;
+		} else {
+			pr_err("NK: nk_protected_ptpages array overflow!\n");
+		}
 	}
+
+	pr_info("NK: Total protected PTE pages recorded: %d\n", nk_nr_protected_ptpages);
 }
