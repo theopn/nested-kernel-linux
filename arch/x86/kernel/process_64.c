@@ -713,8 +713,14 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 #ifndef MSR_IA32_PKRS
 #define MSR_IA32_PKRS 0x6E1
 #endif
-	if (unlikely(prev_p->thread.nk_pkrs_state != next_p->thread.nk_pkrs_state)) {
-		wrmsrl(MSR_IA32_PKRS, next_p->thread.nk_pkrs_state);
+#ifndef X86_FEATURE_PKS
+#define X86_FEATURE_PKS (16 * 32 + 31)
+#endif
+	if (cpu_feature_enabled(X86_FEATURE_PKS)) {
+		u64 pkrs;
+		rdmsrq(MSR_IA32_PKRS, pkrs);
+		prev_p->thread.nk_pkrs_state = (u32)pkrs;
+		wrmsrq(MSR_IA32_PKRS, next_p->thread.nk_pkrs_state);
 	}
 
 	return prev_p;
